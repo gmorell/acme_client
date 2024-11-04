@@ -148,7 +148,7 @@ defmodule AcmeClient.Poller do
     cb_mod = args[:cb_mod]
     {:ok, cb_context} = apply(cb_mod, :init, [args])
 
-    validate_ns = args[:validate_ns] || true
+    validate_ns = if args[:validate_ns] != nil do args[:f] else true end
     valid_ns = args[:valid_ns] || []
 
     state = %{
