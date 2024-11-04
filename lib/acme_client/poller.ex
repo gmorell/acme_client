@@ -148,6 +148,7 @@ defmodule AcmeClient.Poller do
     cb_mod = args[:cb_mod]
     {:ok, cb_context} = apply(cb_mod, :init, [args])
 
+    validate_ns = args[:validate_ns] || true
     valid_ns = args[:valid_ns] || []
 
     state = %{
@@ -166,8 +167,9 @@ defmodule AcmeClient.Poller do
       # Order status
       status: :pending,
       challenge_responses: args[:challenge_responses],
-      dns_records: false,
+      dns_records: false || !validate_ns,
       dns_opts: args[:dns_opts] || [],
+      validate_ns: validate_ns,
       valid_ns: valid_ns
     }
 
@@ -292,24 +294,30 @@ defmodule AcmeClient.Poller do
       for {_domain, responses} <- challenge_responses, response <- responses do
         %{"domain" => domain, "response" => response_code} = response
 
-        case validate_ns(domain, state.valid_ns, 2) do
-          {_domain, :valid} ->
-            host = AcmeClient.dns_challenge_name(domain)
-            txt_records = AcmeClient.dns_txt_records(host)
+        case state.validate_ns do
+          true ->
+            case validate_ns(domain, state.valid_ns, 2) do
+              {_domain, :valid} ->
+                host = AcmeClient.dns_challenge_name(domain)
+                txt_records = AcmeClient.dns_txt_records(host)
 
-            if response_code in txt_records do
-              Logger.debug("DNS found #{host} #{response_code}")
-              :ok
-            else
-              Logger.debug("DNS not found #{host} #{response_code}")
-              :transient
+                if response_code in txt_records do
+                  Logger.debug("DNS found #{host} #{response_code}")
+                  :ok
+                else
+                  Logger.debug("DNS not found #{host} #{response_code}")
+                  :transient
+                end
+
+              {_domain, :invalid} ->
+                :permanent
+
+              {_domain, :missing} ->
+                :permanent
             end
 
-          {_domain, :invalid} ->
-            :permanent
-
-          {_domain, :missing} ->
-            :permanent
+          false ->
+            :ok
         end
       end
 
